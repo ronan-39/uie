@@ -57,7 +57,7 @@ class UWCNN(nn.Module):
         out = x + image_conv10
 
         return out
-    
+
 if __name__ == "__main__":
     from torchinfo import summary
     uwcnn = UWCNN()
