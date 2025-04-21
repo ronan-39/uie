@@ -10,8 +10,6 @@ from losses import CombinedLoss
 from datasets import build_dataset
 from training import train_model
 
-dataset_root = r"C:\Users\ronan\Documents\Datasets\UEIB"
-
 if __name__ == '__main__':
     with open('./config.toml', 'rb') as f:
         cfg = tomllib.load(f)
