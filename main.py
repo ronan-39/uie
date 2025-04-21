@@ -1,10 +1,11 @@
+import tomllib
+from datetime import datetime
 import torch
 from torch.utils.data import random_split, DataLoader
 import torchvision
 import torchvision.transforms as transforms
-from datetime import datetime
-from models import uwcnn
 
+from models import uwcnn
 from losses import CombinedLoss
 from datasets import build_dataset
 from training import train_model
@@ -12,7 +13,12 @@ from training import train_model
 dataset_root = r"C:\Users\ronan\Documents\Datasets\UEIB"
 
 if __name__ == '__main__':
+    with open('./config.toml', 'rb') as f:
+        cfg = tomllib.load(f)
+
+    dataset_root = cfg['dataset_root']
     dataset = build_dataset(dataset_root+"/raw-890", dataset_root+"/reference-890")
+    
     dataset_len = len(dataset)
     train_size = int(0.7 * dataset_len)
     val_size = int(0.15 * dataset_len)
