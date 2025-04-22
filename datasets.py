@@ -39,13 +39,13 @@ class NYUDataset(Dataset):
             transforms.ToImage(),
             transforms.ToDtype(torch.float32, scale=True),
             transforms.ToPureTensor(),
-            transforms.Normalize((0.5,), (0.5,))
+            # transforms.Normalize((0.5,), (0.5,))
         ])
         self.depth_pre_transform = transforms.Compose([
             transforms.ToImage(),
             transforms.ToDtype(torch.float32, scale=True),
             transforms.ToPureTensor(),
-            transforms.Normalize((0.5,), (0.5,))
+            # transforms.Normalize((0.5,), (0.5,))
         ])
 
         self.image_filenames = sorted(os.listdir(images_dir))
@@ -62,14 +62,14 @@ class NYUDataset(Dataset):
         depth_path = os.path.join(self.depth_maps_dir, self.depth_filenames[idx])
         label_path = os.path.join(self.labels_dir, self.label_filenames[idx])
 
-        image = Image.open(img_path).convert("RGB")
-        mask = Image.open(img_path).convert('L')
+        rgb = Image.open(img_path).convert("RGB")
+        depth = Image.open(depth_path).convert('L')
         label = Image.open(label_path)
 
-        img_tensor, label_tensor = self.image_pre_transform(image, label)
-        mask_tensor = self.depth_pre_transform(mask)
+        rgb_tensor, label_tensor = self.image_pre_transform(rgb, label)
+        depth_tensor = self.depth_pre_transform(depth)
 
-        depth_img = torch.cat((img_tensor, mask_tensor), dim=0)
+        depth_img = torch.cat((rgb_tensor, depth_tensor), dim=0)
 
         if self.transform:
             depth_img, label = self.transform(depth_img, label)
