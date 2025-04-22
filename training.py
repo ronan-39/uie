@@ -3,7 +3,7 @@ from tqdm import tqdm
 from datetime import datetime
 import matplotlib.pyplot as plt
 
-def train_model(model, train_loader, val_loader, optimizer, criterion, device, num_epochs=10, plot_title=None):
+def train_model(model, train_loader, val_loader, optimizer, criterion, device, num_epochs=10, plot_title=None, input_processor=None):
     train_losses = []
     val_losses = []
     model.to(device)
@@ -19,6 +19,9 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, device, n
 
         for inputs, targets in tqdm(train_loader, desc="Training", leave=False):
             inputs, targets = inputs.to(device), targets.to(device)
+
+            if input_processor is not None:
+                inputs = input_processor(inputs)
 
             optimizer.zero_grad()
             outputs = model(inputs)
@@ -41,6 +44,9 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, device, n
         with torch.no_grad():
             for inputs, targets in val_loader:
                 inputs, targets = inputs.to(device), targets.to(device)
+                if input_processor is not None:
+                    inputs = input_processor(inputs)
+
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
                 val_loss += loss.item() * inputs.size(0)
@@ -52,6 +58,7 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, device, n
         print(f"  Val Loss:   {val_loss:.4f}")
 
     print(f"best validation loss: {min(val_losses)}")
+    print(f'{val_losses = }')
     plt.plot(range(1, num_epochs + 1), train_losses, label='Training Loss')
     plt.plot(range(1, num_epochs + 1), val_losses, label='Validation Loss')
     plt.xlabel('Epochs')

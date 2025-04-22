@@ -85,7 +85,7 @@ def build_uied_dataset(images_dir, labels_dir):
         transforms.ToImage(),
         transforms.ToDtype(torch.float32, scale=True),
         transforms.ToPureTensor(),
-        transforms.Normalize((0.5,), (0.5,))
+        # transforms.Normalize((0.5,), (0.5,))
     ])
 
     return UIEDataset(images_dir, labels_dir, transform)

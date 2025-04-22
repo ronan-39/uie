@@ -9,6 +9,7 @@ from models import uwcnn, uwcnn_depth
 from losses import CombinedLoss
 from datasets import build_uied_dataset, build_nyu_dataset
 from training import train_model
+from estimate_depth import RgbToRgbd
 
 import matplotlib.pyplot as plt
 
@@ -80,16 +81,28 @@ def train_nyu_with_depth():
     val_loader = DataLoader(val_dataset, batch_size=32)
     test_loader = DataLoader(test_dataset, batch_size=32)
 
-    model = uwcnn_depth.UWCNN_Depth()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    model = uwcnn_depth.UWCNN_Depth()
     loss = CombinedLoss()
-
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'], betas=cfg['betas'])
 
-    train_model(model, train_loader, val_loader, optimizer, loss, device, num_epochs=cfg['num_epochs'], plot_title="NYU with Depth Training")
+    input_processor = transforms.Compose([
+        transforms.Normalize((0.5,), (0.5,)),
+    ])
+
+    train_model(model,
+        train_loader,
+        val_loader,
+        optimizer,
+        loss,
+        device,
+        num_epochs=cfg['num_epochs'],
+        plot_title="NYU with Depth Training",
+        input_processor=input_processor
+    )
+
     print("NYU with depth")
-    eval(model, test_loader, loss, device)
+    eval(model, test_loader, loss, device, input_processor)
     test_img, test_label = test_dataset[0]
     with torch.no_grad():
         output = model(test_img.unsqueeze(0).to(device)).cpu()[0]
@@ -132,16 +145,18 @@ def train_nyu_no_depth():
     val_loader = DataLoader(val_dataset, batch_size=32)
     test_loader = DataLoader(test_dataset, batch_size=32)
 
-    model = uwcnn.UWCNN()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    model = uwcnn.UWCNN()
     loss = CombinedLoss()
-
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'], betas=cfg['betas'])
 
-    train_model(model, train_loader, val_loader, optimizer, loss, device, num_epochs=cfg['num_epochs'], plot_title="NYU with no Depth Training, Tiny Model")
+    input_processor = transforms.Compose([
+        transforms.Normalize((0.5,), (0.5,)),
+    ])
+
+    train_model(model, train_loader, val_loader, optimizer, loss, device, num_epochs=cfg['num_epochs'], plot_title="NYU with no Depth Training, Tiny Model", input_processor=input_processor)
     print("NYU no depth, tiny model")
-    eval(model, test_loader, loss, device)
+    eval(model, test_loader, loss, device, input_processor)
     print(cfg)
 
     test_img, test_label = test_dataset[0]
@@ -161,13 +176,82 @@ def train_nyu_no_depth():
     axs[2].set_title("ground truth")
     plt.show()
 
-def eval(model, test_loader, criterion, device):
+def train_nyu_with_depth_predict():
+    with open('./config.toml', 'rb') as f:
+        cfg = tomllib.load(f)
+
+    dataset_root = cfg['nyu_dataset_root']
+    dataset = build_uied_dataset(
+        images_dir=dataset_root+"/type3_data/underwater_type_3",
+        labels_dir=dataset_root+"/type3_data/gt_type_type_3"
+    )
+
+    dataset_len = len(dataset)
+    train_size = int(cfg['train_split'] * dataset_len)
+    val_size = int(cfg['val_split'] * dataset_len)
+    test_size = dataset_len - train_size - val_size
+
+    train_dataset, val_dataset, test_dataset = random_split(
+        dataset,
+        [train_size, val_size, test_size],
+        generator=torch.Generator().manual_seed(1)
+    )
+
+    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=32)
+    test_loader = DataLoader(test_dataset, batch_size=32)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = uwcnn_depth.UWCNN_Depth()
+    loss = CombinedLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'], betas=cfg['betas'])
+
+    input_processor = transforms.Compose([
+        RgbToRgbd(),
+        transforms.Normalize((0.5,), (0.5,)),
+    ])
+
+    train_model(
+        model,
+        train_loader,
+        val_loader,
+        optimizer,
+        loss,
+        device,
+        num_epochs=cfg['num_epochs'],
+        plot_title="NYU with Estimated Depth Training",
+        input_processor=input_processor
+    )
+    print("NYU with estimated depth")
+    eval(model, test_loader, loss, device, input_processor)
+
+    test_input, test_label = test_dataset[0]
+    test_input = input_processor([test_input])
+    with torch.no_grad():
+        output = model(test_input).cpu()[0]
+    print(f'{output.shape = }')
+    rgb = test_input[0:3]
+    rgb = (rgb - rgb.min()) / (rgb.max() - rgb.min())
+    fig, axs = plt.subplots(ncols=3)
+    axs[0].imshow(rgb.permute(1,2,0))
+    axs[0].set_title("input")
+
+    axs[1].imshow(output.permute(1,2,0))
+    axs[1].set_title("prediction")
+
+    axs[2].imshow(test_label.permute(1,2,0))
+    axs[2].set_title("ground truth")
+    plt.show()
+
+def eval(model, test_loader, criterion, device, input_processor):
     total_loss = 0.0
     num_batches = 0
 
     with torch.no_grad():  # no gradient tracking for evaluation
         for inputs, targets in test_loader:
             inputs, targets = inputs.to(device), targets.to(device)
+
+            inputs = input_processor(inputs)
             
             outputs = model(inputs)
             loss = criterion(outputs, targets)
@@ -183,6 +267,7 @@ def eval(model, test_loader, criterion, device):
 
 if __name__ == '__main__':
     train_nyu_with_depth()
+    # train_nyu_with_depth_predict()
     # train_nyu_no_depth()
 
     # with open('./config.toml', 'rb') as f:
