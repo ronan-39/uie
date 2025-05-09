@@ -1,6 +1,6 @@
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 import tomllib
-from datasets import build_uied_dataset, build_nyu_dataset
+from datasets import build_uied_dataset, build_depth_dataset
 import matplotlib.pyplot as plt
 import torch
 
@@ -42,11 +42,11 @@ if __name__ == "__main__":
     with open('./config.toml', 'rb') as f:
         cfg = tomllib.load(f)
 
-    dataset_root = cfg['nyu_dataset_root']
-    dataset = build_nyu_dataset(
-        images_dir=dataset_root+"/type3_data/underwater_type_3",
-        depth_maps_dir=dataset_root+"/type3_data/transmission_type_3",
-        labels_dir=dataset_root+"/type3_data/gt_type_type_3"
+    dataset_name = 'nyu_type3'
+    dataset = build_depth_dataset(
+        images_dir = cfg['datasets'][dataset_name]['img'],
+        gt_dir = cfg['datasets'][dataset_name]['gt'],
+        depth_dir = cfg['datasets'][dataset_name]['depth']
     )
 
     distorted, undistorted = dataset[0]
