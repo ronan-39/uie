@@ -15,7 +15,7 @@ from estimate_depth import RgbToRgbd
 import matplotlib.pyplot as plt
 
 def train_uwdcnn(model_name, dataset_name, cfg, gt_depth=True):
-    print(f"Training UWDCNN-{model_name} on {dataset_name}. {gt_depth=}")
+    print(f"Training UWDCNN-{model_name} on {dataset_name} for {cfg['num_epochs']} epochs. {gt_depth=}")
 
     uwdcnn_models = {
         'base': uwcnn_depth.UWCNN_Depth,
@@ -80,6 +80,8 @@ def train_uwdcnn(model_name, dataset_name, cfg, gt_depth=True):
 
 
 def train_uwcnn(model_name, dataset_name, cfg):
+    print(f"Training UWCNN-{model_name} on {dataset_name} for {cfg['num_epochs']} epochs.")
+
     uwcnn_models = {
         'base': uwcnn.UWCNN,
         'small': uwcnn.Small_UWCNN,
