@@ -5,6 +5,8 @@ from torch.utils.data import random_split, DataLoader
 import torchvision
 import torchvision.transforms as transforms
 import torch.nn.functional as F
+from skimage.metrics import structural_similarity as ssim
+import numpy as np
 
 from models import uwcnn, uwcnn_depth
 from losses import CombinedLoss
@@ -93,7 +95,7 @@ def train_uwcnn(model_name, dataset_name, cfg):
 
     dataset = build_uied_dataset(
         images_dir = cfg['datasets'][dataset_name]['img'],
-        gt_dir = cfg['datasets'][dataset_name]['gt'],
+        labels_dir = cfg['datasets'][dataset_name]['gt'],
     )
 
     dataset_len = len(dataset)
@@ -139,6 +141,7 @@ def train_uwcnn(model_name, dataset_name, cfg):
 @torch.no_grad()
 def evaluate_performance(model, test_loader, input_processor):
     batch_psnrs = []
+    batch_ssims = []
 
     device = next(model.parameters()).device
 
@@ -148,8 +151,10 @@ def evaluate_performance(model, test_loader, input_processor):
         inputs = input_processor(inputs)
         predictions = model(inputs)
         batch_psnrs.append(psnr(predictions, targets).mean())
+        batch_ssims.append(batch_ssim(predictions, targets).mean())
 
     print("Average PSNR on test set:", round(torch.Tensor(batch_psnrs).mean().item(), 4))
+    print("Average SSIM on test set:", round(torch.Tensor(batch_ssims).mean().item(), 4))
 
 def psnr(prediction, target, max_val=1):
     mse = F.mse_loss(prediction, target, reduction='none')
@@ -157,9 +162,29 @@ def psnr(prediction, target, max_val=1):
     psnr = 10 * torch.log10((max_val ** 2) / mse)
     return psnr
 
-if __name__ == '__main__':
+def batch_ssim(prediction, target, data_range=None):
+    prediction = prediction.permute(0,2,3,1).cpu().numpy()
+    target = target.permute(0,2,3,1).cpu().numpy()
+    assert prediction.shape == target.shape, "Input batches must have the same shape"
+    batch_size = prediction.shape[0]
+    multichannel = prediction.ndim == 4  # (N, H, W, C)
+
+    ssim_scores = []
+    for i in range(batch_size):
+        range_val = data_range
+        if data_range is None:
+            range_val = max(prediction[i].max(), target[i].max())
+        score = ssim(prediction[i], target[i], data_range=range_val, channel_axis=-1 if multichannel else None)
+        ssim_scores.append(score)
+
+    return np.array(ssim_scores)
+
+def main():
     with open('./config.toml', 'rb') as f:
         cfg = tomllib.load(f)
+
+    # available model names:
+    # base, small, micro
 
     def test1():
         '''
@@ -168,16 +193,72 @@ if __name__ == '__main__':
         model_name = 'base'
         dataset_name = 'nyu_type3'
         model = train_uwcnn(model_name, dataset_name, cfg)
-        torch.save(model.state_dict(), f'./checkpoints/uwcnn-{model_name}_{dataset_name}.pth')
+        print(f"Trained UWCNN-{model_name} on {dataset_name} for {cfg['num_epochs']} epochs.")
+        torch.save(model.state_dict(), f'./checkpoints/uwcnn-{model_name}_{dataset_name}_{cfg['num_epochs']}_epoch.pth')
 
 
     def test2():
         '''
         depth
         '''
-        model_name = 'micro'
+        model_name = 'base'
         dataset_name = 'nyu_type3'
-        model = train_uwdcnn(model_name, dataset_name, cfg, gt_depth=True)
-        torch.save(model.state_dict(), f'./checkpoints/uwdcnn-{model_name}_{dataset_name}.pth')
+        gt_depth = True
+        model = train_uwdcnn(model_name, dataset_name, cfg, gt_depth=gt_depth)
+        print(f"Trained UWDCNN-{model_name} on {dataset_name} for {cfg['num_epochs']} epochs. {gt_depth=}")
+        torch.save(model.state_dict(), f'./checkpoints/uwdcnn-{model_name}_{dataset_name}_{cfg['num_epochs']}_epoch.pth')
 
+    test1()
+    torch.cuda.empty_cache()
     test2()
+
+if __name__ == '__main__':
+    main()
+
+    # # sample outputs
+    # with open('./config.toml', 'rb') as f:
+    #     cfg = tomllib.load(f)
+
+    # model = uwcnn_depth.UWCNN_Depth()
+    # checkpoint = torch.load('./checkpoints/uwdcnn-base_nyu_type3.pth')
+    # model.load_state_dict(checkpoint)
+
+    # input_processor = transforms.Compose([
+    #     transforms.Normalize((0.5,), (0.5,)),
+    # ])
+
+    # dataset_name = 'nyu_type3'
+    # dataset = build_depth_dataset(
+    #     images_dir = cfg['datasets'][dataset_name]['img'],
+    #     gt_dir = cfg['datasets'][dataset_name]['gt'],
+    #     depth_dir = cfg['datasets'][dataset_name]['depth']
+    # )
+
+    # img, label = dataset[0]
+    # input = input_processor(img.unsqueeze(0))
+
+    # with torch.no_grad():
+    #     prediction = model(input)
+
+    # sample_psnr = psnr(label.unsqueeze(0).contiguous(), prediction)
+    # sample_ssim = batch_ssim(label.unsqueeze(0), prediction).mean()
+    # print(f"{sample_psnr=}")
+    # print(f"{sample_ssim=}")
+
+    # # fig, axs = plt.subplots(ncols=3, figsize=(15, 5))
+    # # # axs[0].imshow(img[:-1].permute(1,2,0))
+    # # im0 = axs[0].imshow(img[0:1].permute(1,2,0))
+    # # fig.colorbar(im0, ax=axs[0])
+    # # axs[0].set_title("input")
+    
+    # # # axs[1].imshow(label.permute(1,2,0))
+    # # im1 = axs[1].imshow(label[0:1].permute(1,2,0))
+    # # fig.colorbar(im1, ax=axs[1])
+    # # axs[1].set_title("ground truth")
+
+    # # # axs[2].imshow(prediction[0].permute(1,2,0))
+    # # im2 = axs[2].imshow(prediction[0][0:1].permute(1,2,0))
+    # # fig.colorbar(im2, ax=axs[2])
+    # # axs[2].set_title("prediction")
+
+    # # plt.show()

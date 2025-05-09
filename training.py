@@ -36,7 +36,7 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, device, n
 
         train_loss = running_loss / total
         train_losses.append(train_loss)
-        print(f"  Train Loss: {train_loss:.4f}")
+        print(f"  Train Loss: {train_loss:.4f}", end="")
 
         # --- Validation ---
         model.eval()
