@@ -20,6 +20,8 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, device, n
         for inputs, targets in tqdm(train_loader, desc="Training", leave=False):
             inputs, targets = inputs.to(device), targets.to(device)
 
+            # print(f"{inputs.shape=}, {targets.shape=}")
+
             if input_processor is not None:
                 inputs = input_processor(inputs)
 

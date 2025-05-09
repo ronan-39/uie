@@ -1,0 +1,22 @@
+# the required fields are specified here.
+# must complete the path to the datasets
+# the other variables are treated as defaults
+
+# in order to support datasets with different layouts, must specify the image
+# and ground truth directory for each
+
+train_split=0.6
+val_split=0.15
+
+lr = 0.002
+betas = [0.9, 0.999]
+num_epochs = 15
+
+[datasets.uieb]
+img = '.../raw-890'
+gt = '.../reference-890'
+
+[datasets.nyu_type3]
+img = '.../underwater_type_3'
+gt = '.../gt_type_type_3'
+
