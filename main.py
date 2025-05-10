@@ -31,14 +31,16 @@ def train_uwdcnn(model_name, dataset_name, cfg, gt_depth=True):
     if gt_depth:
         assert 'depth' in cfg['datasets'][dataset_name], "Specified dataset does not have ground truth depth"
     
-    if gt_depth == False:
-        raise NotImplementedError("Can't predict depth yet")
-
-    dataset = build_depth_dataset(
-        images_dir = cfg['datasets'][dataset_name]['img'],
-        gt_dir = cfg['datasets'][dataset_name]['gt'],
-        depth_dir = cfg['datasets'][dataset_name]['depth']
-    )
+        dataset = build_depth_dataset(
+            images_dir = cfg['datasets'][dataset_name]['img'],
+            gt_dir = cfg['datasets'][dataset_name]['gt'],
+            depth_dir = cfg['datasets'][dataset_name]['depth']
+        )
+    else:
+        dataset = build_uied_dataset(
+            images_dir = cfg['datasets'][dataset_name]['img'],
+            labels_dir = cfg['datasets'][dataset_name]['gt'],
+        )
 
     dataset_len = len(dataset)
     train_size = int(cfg['train_split'] * dataset_len)
@@ -60,9 +62,15 @@ def train_uwdcnn(model_name, dataset_name, cfg, gt_depth=True):
     loss = CombinedLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg['lr'], betas=cfg['betas'])
     
-    input_processor = transforms.Compose([
-        transforms.Normalize((0.5,), (0.5,)),
-    ])
+    if gt_depth:
+        input_processor = transforms.Compose([
+            transforms.Normalize((0.5,), (0.5,)),
+        ])
+    else:
+        input_processor = transforms.Compose([
+            RgbToRgbd(),
+            transforms.Normalize((0.5,), (0.5,))
+        ])
 
     train_model(
         model,
@@ -180,13 +188,16 @@ def batch_ssim(prediction, target, data_range=None):
     return np.array(ssim_scores)
 
 def main():
+    '''
+    train models
+    '''
     with open('./config.toml', 'rb') as f:
         cfg = tomllib.load(f)
 
     # available model names:
     # base, small, micro
 
-    def test1():
+    def t1():
         '''
         no depth
         '''
@@ -197,30 +208,77 @@ def main():
         torch.save(model.state_dict(), f'./checkpoints/uwcnn-{model_name}_{dataset_name}_{cfg['num_epochs']}_epoch.pth')
 
 
-    def test2():
+    def t2():
         '''
         depth
         '''
         model_name = 'base'
         dataset_name = 'nyu_type3'
-        gt_depth = True
+        gt_depth = False
         model = train_uwdcnn(model_name, dataset_name, cfg, gt_depth=gt_depth)
         print(f"Trained UWDCNN-{model_name} on {dataset_name} for {cfg['num_epochs']} epochs. {gt_depth=}")
-        torch.save(model.state_dict(), f'./checkpoints/uwdcnn-{model_name}_{dataset_name}_{cfg['num_epochs']}_epoch.pth')
+        torch.save(model.state_dict(), f'./checkpoints/uwdcnn-{model_name}_{dataset_name}_{cfg['num_epochs']}_epoch_{'gt' if gt_depth else 'est'}.pth')
 
-    test1()
+    t1()
     torch.cuda.empty_cache()
-    test2()
+    t2()
+
+def view_model_sample_outputs():
+    with open('./config.toml', 'rb') as f:
+        cfg = tomllib.load(f)
+
+    model = uwcnn_depth.UWCNN_Depth()
+    checkpoint = torch.load('./checkpoints/uwdcnn-base_nyu_type3_50_epoch.pth')
+    model.load_state_dict(checkpoint)
+
+    input_processor = transforms.Compose([
+        transforms.Normalize((0.5,), (0.5,)),
+    ])
+
+    dataset_name = 'nyu_type3'
+    dataset = build_depth_dataset(
+        images_dir = cfg['datasets'][dataset_name]['img'],
+        gt_dir = cfg['datasets'][dataset_name]['gt'],
+        depth_dir = cfg['datasets'][dataset_name]['depth']
+    )
+
+    img, label = dataset[1]
+    input = input_processor(img.unsqueeze(0))
+
+    with torch.no_grad():
+        prediction = model(input)
+
+    fig, axs = plt.subplots(ncols=3, figsize=(15, 5))
+    axs[0].imshow(img[:-1].permute(1,2,0))
+    axs[0].set_title("input")
+    
+    axs[1].imshow(label.permute(1,2,0))
+    axs[1].set_title("ground truth")
+
+    axs[2].imshow(prediction[0].permute(1,2,0))
+    axs[2].set_title("prediction")
+
+    for ax in axs:
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_aspect('equal')
+
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == '__main__':
-    main()
+    # main()
 
-    # # sample outputs
+    '''
+        eval ssim metric on the trained models
+    '''
     # with open('./config.toml', 'rb') as f:
     #     cfg = tomllib.load(f)
 
-    # model = uwcnn_depth.UWCNN_Depth()
-    # checkpoint = torch.load('./checkpoints/uwdcnn-base_nyu_type3.pth')
+    # # model = uwcnn_depth.UWCNN_Depth()
+    # # checkpoint = torch.load('./checkpoints/uwdcnn-base_nyu_type3.pth')
+    # model = uwcnn.Tiny_UWCNN()
+    # checkpoint = torch.load('./checkpoints/uwcnn-micro_nyu_type3.pth')
     # model.load_state_dict(checkpoint)
 
     # input_processor = transforms.Compose([
@@ -228,37 +286,23 @@ if __name__ == '__main__':
     # ])
 
     # dataset_name = 'nyu_type3'
-    # dataset = build_depth_dataset(
+    # dataset = build_uied_dataset(
     #     images_dir = cfg['datasets'][dataset_name]['img'],
-    #     gt_dir = cfg['datasets'][dataset_name]['gt'],
-    #     depth_dir = cfg['datasets'][dataset_name]['depth']
+    #     labels_dir = cfg['datasets'][dataset_name]['gt'],
+    #     # depth_dir = cfg['datasets'][dataset_name]['depth']
     # )
 
-    # img, label = dataset[0]
-    # input = input_processor(img.unsqueeze(0))
+    # dataset_len = len(dataset)
+    # train_size = int(cfg['train_split'] * dataset_len)
+    # val_size = int(cfg['val_split'] * dataset_len)
+    # test_size = dataset_len - train_size - val_size
 
-    # with torch.no_grad():
-    #     prediction = model(input)
+    # _, _, test_dataset = random_split(
+    #     dataset,
+    #     [train_size, val_size, test_size],
+    #     generator=torch.Generator().manual_seed(1)
+    # )
 
-    # sample_psnr = psnr(label.unsqueeze(0).contiguous(), prediction)
-    # sample_ssim = batch_ssim(label.unsqueeze(0), prediction).mean()
-    # print(f"{sample_psnr=}")
-    # print(f"{sample_ssim=}")
+    # test_loader = DataLoader(test_dataset, batch_size=32)
 
-    # # fig, axs = plt.subplots(ncols=3, figsize=(15, 5))
-    # # # axs[0].imshow(img[:-1].permute(1,2,0))
-    # # im0 = axs[0].imshow(img[0:1].permute(1,2,0))
-    # # fig.colorbar(im0, ax=axs[0])
-    # # axs[0].set_title("input")
-    
-    # # # axs[1].imshow(label.permute(1,2,0))
-    # # im1 = axs[1].imshow(label[0:1].permute(1,2,0))
-    # # fig.colorbar(im1, ax=axs[1])
-    # # axs[1].set_title("ground truth")
-
-    # # # axs[2].imshow(prediction[0].permute(1,2,0))
-    # # im2 = axs[2].imshow(prediction[0][0:1].permute(1,2,0))
-    # # fig.colorbar(im2, ax=axs[2])
-    # # axs[2].set_title("prediction")
-
-    # # plt.show()
+    # evaluate_performance(model, test_loader, input_processor)

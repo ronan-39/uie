@@ -3,6 +3,11 @@ import tomllib
 from datasets import build_uied_dataset, build_depth_dataset
 import matplotlib.pyplot as plt
 import torch
+import os
+from PIL import Image
+import torchvision
+import torchvision.transforms.v2 as transforms
+from tqdm import tqdm
 
 class DepthEstimator():
     def __init__(self):
@@ -37,8 +42,7 @@ class RgbToRgbd():
     def __call__(self, images):
         return torch.cat((images, self.de.predict(images)), dim=1)
 
-
-if __name__ == "__main__":
+def sample():
     with open('./config.toml', 'rb') as f:
         cfg = tomllib.load(f)
 
@@ -75,3 +79,6 @@ if __name__ == "__main__":
         ax.set_yticks([])
 
     plt.show()
+
+if __name__ == "__main__":
+    sample()
